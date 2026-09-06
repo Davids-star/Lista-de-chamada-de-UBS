@@ -16,9 +16,6 @@
     "saude"
   ],
   "license": "MIT",
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
