@@ -32,9 +32,8 @@ Para entender as regras de negócio, arquitetura estrutural e o planejamento das
 
 Para rodar este projeto localmente, você precisará ter instalado na sua máquina:
 - [Node.js](https://nodejs.org/) (Versão 18 ou superior)
-- [PostgreSQL](https://www.postgresql.org/) (Ou usar via Docker)
+- [PostgreSQL](https://www.postgresql.org/) (instalado localmente)
 - [RabbitMQ](https://www.rabbitmq.com/) (Recomendado usar via Docker)
-- [Docker](https://www.docker.com/) (Para facilitar a subida do banco e mensageria)
 
 ---
 
