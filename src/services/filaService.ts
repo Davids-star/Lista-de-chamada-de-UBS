@@ -1,9 +1,13 @@
 import { Status } from "@prisma/client";
 import { prisma } from "../config/prisma";
+import {
+  emitirFilaAtualizada,
+  emitirStatusAlterado,
+} from "../websocket";
 import type { CadastroPaciente } from "../utils/validation";
 
 export async function criarPaciente(data: CadastroPaciente) {
-  return prisma.$transaction(async (tx) => {
+  const paciente = await prisma.$transaction(async (tx) => {
     const inicioDoDia = new Date();
     inicioDoDia.setHours(0, 0, 0, 0);
 
@@ -15,6 +19,9 @@ export async function criarPaciente(data: CadastroPaciente) {
       data: { ...data, senha: pacientesHoje + 1 },
     });
   });
+
+  emitirFilaAtualizada(paciente);
+  return paciente;
 }
 
 export async function listarFila() {
@@ -45,5 +52,8 @@ export async function alterarStatus(id: number, status: Status) {
   const data: { status: Status; atendidoEm?: Date } = { status };
   if (status === "finalizado") data.atendidoEm = new Date();
 
-  return prisma.paciente.update({ where: { id }, data });
+  const atualizado = await prisma.paciente.update({ where: { id }, data });
+
+  emitirStatusAlterado(atualizado);
+  return atualizado;
 }
