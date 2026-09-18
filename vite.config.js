@@ -3,6 +3,7 @@ import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/Lista-de-chamada-de-UBS/',
   plugins: [vue()],
   server: {
     // Expõe o dev server na rede local (mostra o IP no terminal ao rodar `npm run dev`)

@@ -210,6 +210,7 @@ onUnmounted(() => {
             type="text"
             inputmode="numeric"
             maxlength="11"
+            autocomplete="off"
             required
           />
         </label>

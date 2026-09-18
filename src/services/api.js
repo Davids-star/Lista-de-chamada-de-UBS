@@ -31,11 +31,11 @@ export function listarFila() {
 }
 
 export function consultarStatus(id) {
-  return request(`/api/fila/${id}/status`);
+  return request(`/api/fila/${encodeURIComponent(id)}/status`);
 }
 
 export function alterarStatus(id, status) {
-  return request(`/api/fila/${id}/status`, {
+  return request(`/api/fila/${encodeURIComponent(id)}/status`, {
     method: "PUT",
     body: JSON.stringify({ status }),
   });
