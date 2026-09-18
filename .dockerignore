@@ -1,0 +1,12 @@
+node_modules
+dist
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+*.log
+whatsapp_auth
+AGENTS.md
+docs
+test_socket.js
