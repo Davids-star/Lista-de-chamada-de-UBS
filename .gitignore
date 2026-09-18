@@ -1,3 +1,18 @@
+# Dependências
+node_modules/
+.pnp
+.pnp.js
+
+# Build e Produção
+dist/
+dist-ssr/
+*.local
+
+# Variáveis de Ambiente (mantendo apenas .env.example)
+.env
+.env.*
+!.env.example
+
 # Logs
 logs
 *.log
@@ -7,21 +22,27 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# Testes e Cobertura
+coverage/
+.nyc_output/
 
-# Ambiente
-.env
+# Cache e Arquivos temporários
+.cache/
+.vite/
+.eslintcache
 
-# Editor directories and files
+# Editores e IDEs
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+!.vscode/settings.json
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# Sistema Operacional
+.DS_Store
+Thumbs.db
+ehthumbs.db
