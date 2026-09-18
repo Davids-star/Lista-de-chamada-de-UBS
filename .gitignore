@@ -144,3 +144,6 @@ vite.config.ts.timestamp-*
 
 # Agents
 AGENTS.md
+
+# WhatsApp Baileys session
+whatsapp_auth/

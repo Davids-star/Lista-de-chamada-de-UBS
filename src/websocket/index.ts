@@ -11,6 +11,14 @@ export function initSocket(httpServer: HttpServer): Server {
 
   io.on("connection", (socket) => {
     console.log(`Cliente conectado via Socket.io: ${socket.id}`);
+
+    socket.on("qr_code_whatsapp", (qr: string) => {
+      socket.broadcast.emit("qr_code_whatsapp", qr);
+    });
+
+    socket.on("whatsapp_conectado", () => {
+      socket.broadcast.emit("whatsapp_conectado");
+    });
   });
 
   return io;

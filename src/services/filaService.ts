@@ -4,6 +4,7 @@ import {
   emitirFilaAtualizada,
   emitirStatusAlterado,
 } from "../websocket";
+import { publicarNotificacaoWhatsApp } from "../messaging/publisher";
 import type { CadastroPaciente } from "../utils/validation";
 
 export async function criarPaciente(data: CadastroPaciente) {
@@ -54,6 +55,26 @@ export async function alterarStatus(id: number, status: Status) {
 
   const atualizado = await prisma.paciente.update({ where: { id }, data });
 
+  if (status === "em_atendimento") {
+    await notificarProximoDaFila();
+  }
+
   emitirStatusAlterado(atualizado);
   return atualizado;
+}
+
+async function notificarProximoDaFila() {
+  const quarto = await prisma.paciente.findFirst({
+    where: { status: "em_espera" },
+    orderBy: { criadoEm: "asc" },
+    skip: 3,
+  });
+
+  if (quarto) {
+    publicarNotificacaoWhatsApp({
+      telefone: quarto.telefone,
+      nome: quarto.nome,
+      pessoasNaFrente: 3,
+    });
+  }
 }
