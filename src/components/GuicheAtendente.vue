@@ -1,29 +1,69 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from "vue";
-import { alterarStatus, listarFila } from "../services/api";
-import { socket } from "../services/socket";
+import { computed, ref } from "vue";
+import { alterarStatus, state, validarPreferencial } from "../services/localFila";
 
 const HISTORICO_LIMITE = 5;
 
-const pacientes = ref([]);
-const carregando = ref(true);
-const erro = ref("");
-const conectado = ref(socket.connected);
 const recalling = ref(false);
 
+// 'comum' | 'preferencial' — qual fila está sendo exibida/chamada agora.
+const filtro = ref("comum");
+
+const ehPreferencial = (p) => p.prioritario === true;
+
+// Pedidos de preferencial que o paciente marcou no celular e ainda não
+// foram confirmados pela recepção (prioritario === null = pendente).
+const pendentes = computed(() =>
+  state.pacientes
+    .filter((p) => p.solicitouPreferencial && p.prioritario === null)
+    .sort((a, b) => new Date(a.criadoEm) - new Date(b.criadoEm))
+);
+
 const emEspera = computed(() =>
-  pacientes.value
-    .filter((p) => p.status === "em_espera")
+  state.pacientes
+    .filter(
+      (p) => p.status === "em_espera" && ehPreferencial(p) === (filtro.value === "preferencial")
+    )
     .sort((a, b) => new Date(a.criadoEm) - new Date(b.criadoEm))
 );
 
 const atual = computed(
-  () => pacientes.value.find((p) => p.status === "em_atendimento") || null
+  () =>
+    state.pacientes.find(
+      (p) =>
+        p.status === "em_atendimento" &&
+        ehPreferencial(p) === (filtro.value === "preferencial")
+    ) || null
 );
 
+// Resumo das duas filas, sempre visível (independente do filtro selecionado).
+const atualComum = computed(
+  () =>
+    state.pacientes.find((p) => p.status === "em_atendimento" && !ehPreferencial(p)) ||
+    null
+);
+const atualPreferencial = computed(
+  () =>
+    state.pacientes.find((p) => p.status === "em_atendimento" && ehPreferencial(p)) ||
+    null
+);
+const esperandoComum = computed(
+  () => state.pacientes.filter((p) => p.status === "em_espera" && !ehPreferencial(p)).length
+);
+const esperandoPreferencial = computed(
+  () => state.pacientes.filter((p) => p.status === "em_espera" && ehPreferencial(p)).length
+);
+
+// Aviso discreto no topo — só aparece quando existe uma chamada de preferencial em curso.
+const haChamadaPreferencial = computed(() => !!atualPreferencial.value);
+
 const historico = computed(() =>
-  pacientes.value
-    .filter((p) => p.status === "finalizado" || p.status === "ausente")
+  state.pacientes
+    .filter(
+      (p) =>
+        (p.status === "finalizado" || p.status === "ausente") &&
+        ehPreferencial(p) === (filtro.value === "preferencial")
+    )
     .sort(
       (a, b) =>
         new Date(b.atendidoEm ?? b.criadoEm) -
@@ -36,45 +76,18 @@ const podeChamarProxima = computed(
   () => !!atual.value || emEspera.value.length > 0
 );
 
-function upsertPaciente(paciente) {
-  const idx = pacientes.value.findIndex((p) => p.id === paciente.id);
-  if (idx === -1) {
-    pacientes.value.push(paciente);
-  } else {
-    pacientes.value[idx] = paciente;
-  }
-}
-
-async function carregarFila() {
-  carregando.value = true;
-  erro.value = "";
-  try {
-    pacientes.value = await listarFila();
-  } catch (e) {
-    erro.value =
-      "Não foi possível conectar ao servidor. Verifique se o backend (fila-facil) está rodando.";
-  } finally {
-    carregando.value = false;
-  }
-}
-
 // Finaliza quem está em atendimento (se houver) e chama o próximo da espera.
 async function chamarProxima() {
-  erro.value = "";
-  try {
-    if (atual.value) {
-      await alterarStatus(atual.value.id, "finalizado");
-    }
-    const proximo = emEspera.value[0];
-    if (proximo) {
-      await alterarStatus(proximo.id, "em_atendimento");
-    }
-  } catch (e) {
-    erro.value = e.message;
+  if (atual.value) {
+    await alterarStatus(atual.value.id, "finalizado");
+  }
+  const proximo = emEspera.value[0];
+  if (proximo) {
+    await alterarStatus(proximo.id, "em_atendimento");
   }
 }
 
-// Não existe endpoint de "rechamar" no backend — é só um reforço visual local.
+// Reforço visual local — só rechama quem já está em atendimento.
 function chamarNovamente() {
   if (!atual.value) return;
   recalling.value = true;
@@ -83,29 +96,10 @@ function chamarNovamente() {
   }, 700);
 }
 
-function onConnect() {
-  conectado.value = true;
-  carregarFila();
+// Recepção confirma (ou nega) o pedido de preferencial vindo do celular.
+function confirmarPreferencial(id, aprovado) {
+  validarPreferencial(id, aprovado);
 }
-
-function onDisconnect() {
-  conectado.value = false;
-}
-
-onMounted(() => {
-  carregarFila();
-  socket.on("connect", onConnect);
-  socket.on("disconnect", onDisconnect);
-  socket.on("fila_atualizada", upsertPaciente);
-  socket.on("status_alterado", upsertPaciente);
-});
-
-onUnmounted(() => {
-  socket.off("connect", onConnect);
-  socket.off("disconnect", onDisconnect);
-  socket.off("fila_atualizada", upsertPaciente);
-  socket.off("status_alterado", upsertPaciente);
-});
 </script>
 
 <template>
@@ -113,37 +107,97 @@ onUnmounted(() => {
     <header class="header">
       <div class="header__info">
         <span class="header__title">Guichê 01 · Unidade Central</span>
-        <span
-          class="header__subtitle"
-          :class="{ 'header__subtitle--offline': !conectado }"
-        >
-          {{ conectado ? "Conectado" : "Desconectado" }}
-        </span>
+        <span class="header__subtitle">Modo demonstração (dados salvos neste navegador)</span>
       </div>
     </header>
 
     <main class="content">
+      <div v-if="haChamadaPreferencial" class="aviso-preferencial">
+        🔔 Existe uma chamada para preferencial — Senha
+        {{ atualPreferencial.senha }}
+      </div>
+
+      <section v-if="pendentes.length > 0" class="card card--pendentes">
+        <h2 class="card__title">Confirmar atendimento preferencial</h2>
+        <div class="pendente" v-for="p in pendentes" :key="p.id">
+          <p class="pendente__texto">
+            Senha <strong>{{ p.senha }}</strong> ({{ p.nome }}) pediu
+            atendimento preferencial —
+            <strong>{{ p.tipoPreferencial || "não informado" }}</strong>.
+            Confirmar?
+          </p>
+          <div class="pendente__acoes">
+            <button
+              class="btn btn--next"
+              type="button"
+              @click="confirmarPreferencial(p.id, true)"
+            >
+              Sim, é preferencial
+            </button>
+            <button
+              class="btn btn--previous"
+              type="button"
+              @click="confirmarPreferencial(p.id, false)"
+            >
+              Não, é comum
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section class="card">
         <h1 class="card__title">Fila do dia</h1>
+        <p class="card__hint">Toque numa fila abaixo pra escolher quem atender</p>
 
-        <p v-if="erro" class="alert">{{ erro }}</p>
-
-        <div class="calling" :class="{ 'calling--recalling': recalling }">
-          <span class="calling__label">Chamando agora</span>
+        <button
+          class="calling"
+          type="button"
+          :class="{
+            'calling--active': filtro === 'comum',
+            'calling--recalling': recalling && filtro === 'comum',
+          }"
+          @click="filtro = 'comum'"
+        >
+          <span class="calling__label">Comum · Chamando agora</span>
           <div class="calling__grid">
             <div class="calling__field">
               <span class="calling__field-label">Senha</span>
               <span class="calling__field-value">{{
-                atual ? atual.senha : "—"
+                atualComum ? atualComum.senha : "—"
               }}</span>
             </div>
             <div class="calling__divider"></div>
             <div class="calling__field">
               <span class="calling__field-label">Na espera</span>
-              <span class="calling__field-value">{{ emEspera.length }}</span>
+              <span class="calling__field-value">{{ esperandoComum }}</span>
             </div>
           </div>
-        </div>
+        </button>
+
+        <button
+          class="calling calling--preferencial"
+          type="button"
+          :class="{
+            'calling--active': filtro === 'preferencial',
+            'calling--recalling': recalling && filtro === 'preferencial',
+          }"
+          @click="filtro = 'preferencial'"
+        >
+          <span class="calling__label">Preferencial · Chamando agora</span>
+          <div class="calling__grid">
+            <div class="calling__field">
+              <span class="calling__field-label">Senha</span>
+              <span class="calling__field-value">{{
+                atualPreferencial ? atualPreferencial.senha : "—"
+              }}</span>
+            </div>
+            <div class="calling__divider"></div>
+            <div class="calling__field">
+              <span class="calling__field-label">Na espera</span>
+              <span class="calling__field-value">{{ esperandoPreferencial }}</span>
+            </div>
+          </div>
+        </button>
 
         <div class="actions">
           <button
@@ -165,8 +219,7 @@ onUnmounted(() => {
         </div>
 
         <div class="history">
-          <p v-if="carregando" class="history__empty">Carregando fila...</p>
-          <p v-else-if="historico.length === 0" class="history__empty">
+          <p v-if="historico.length === 0" class="history__empty">
             Nenhum atendimento ainda hoje.
           </p>
           <div class="history__item" v-for="item in historico" :key="item.id">
@@ -186,14 +239,17 @@ onUnmounted(() => {
 $color-header-bg: #1b4d3e;
 $color-header-text: #ffffff;
 $color-header-subtext: rgba(255, 255, 255, 0.7);
-$color-offline: #e07a5f;
 
 $color-page-bg: #eceeec;
 $color-card-bg: #ffffff;
 
-$color-accent: #e0a458; // laranja (chamar novamente / "chamando agora")
+$color-accent: #e0a458; // laranja (chamar novamente / fila comum)
 $color-accent-bg: #fdf1e0;
 $color-accent-text: #b5651d;
+
+$color-preferencial: #5b6fd8; // azul (fila preferencial)
+$color-preferencial-bg: #eaecfb;
+$color-preferencial-text: #3c4aa0;
 
 $color-primary: #1b4d3e; // verde escuro (chamar próxima)
 $color-primary-text: #ffffff;
@@ -203,9 +259,6 @@ $color-text-muted: #8a8f8c;
 
 $color-history-bg: #e7e8e5;
 $color-history-text: #4b504d;
-
-$color-alert-bg: #fdecec;
-$color-alert-text: #b3261e;
 
 $radius-lg: 16px;
 $radius-md: 12px;
@@ -263,17 +316,15 @@ button {
   color: $color-header-subtext;
 }
 
-.header__subtitle--offline {
-  color: $color-offline;
-  font-weight: 600;
-}
-
 // ==========================================================================
 // Conteúdo / Card
 // ==========================================================================
 .content {
   background: $color-page-bg;
   padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .card {
@@ -290,28 +341,85 @@ button {
   text-align: center;
   font-size: 16px;
   font-weight: 700;
+  letter-spacing: 0.04em;
   color: $color-text;
 }
 
-.alert {
-  margin: 0;
-  background: $color-alert-bg;
-  color: $color-alert-text;
-  border-radius: $radius-sm;
-  padding: 10px 12px;
+.card__hint {
+  margin: -8px 0 0;
+  text-align: center;
+  font-size: 11px;
+  color: $color-text-muted;
+}
+
+// -- Aviso discreto de chamada preferencial em curso -------------------------
+.aviso-preferencial {
+  background: #fff;
+  border-left: 3px solid $color-accent;
+  color: $color-accent-text;
   font-size: 12px;
   font-weight: 600;
-  text-align: center;
+  padding: 8px 12px;
+  border-radius: $radius-sm;
+}
+
+// -- Pedidos de preferencial pendentes de confirmação -----------------------
+.card--pendentes {
+  border: 2px solid $color-accent;
+  background: $color-accent-bg;
+}
+
+.pendente {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+
+  & + .pendente {
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    padding-top: 12px;
+  }
+}
+
+.pendente__texto {
+  margin: 0;
+  font-size: 13px;
+  color: $color-text;
+}
+
+.pendente__acoes {
+  display: flex;
+  gap: 8px;
 }
 
 // -- Bloco "Chamando agora" ------------------------------------------------
 .calling {
+  width: 100%;
   background: $color-accent-bg;
+  border: 2px solid transparent;
   border-radius: $radius-md;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  text-align: left;
+  transition: border-color 0.15s ease;
+
+  &--active {
+    border-color: $color-accent;
+  }
+}
+
+.calling--preferencial {
+  background: $color-preferencial-bg;
+
+  .calling__label {
+    color: $color-preferencial-text;
+  }
+
+  &.calling--active {
+    border-color: $color-preferencial;
+  }
 }
 
 .calling__label {
@@ -362,6 +470,10 @@ button {
   animation: recall-pulse 0.7s ease;
 }
 
+.calling--preferencial.calling--recalling {
+  animation-name: recall-pulse-preferencial;
+}
+
 @keyframes recall-pulse {
   0%,
   100% {
@@ -369,6 +481,16 @@ button {
   }
   40% {
     background: $color-accent;
+  }
+}
+
+@keyframes recall-pulse-preferencial {
+  0%,
+  100% {
+    background: $color-preferencial-bg;
+  }
+  40% {
+    background: $color-preferencial;
   }
 }
 

@@ -1,16 +1,10 @@
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
-import {
-  alterarStatus,
-  consultarStatus,
-  criarPaciente,
-  listarFila,
-} from "../services/api";
-import { socket } from "../services/socket";
+import { computed, reactive, ref } from "vue";
+import { alterarStatus, criarPaciente, state } from "../services/localFila";
 
-const STORAGE_KEY = "filaFacil.paciente";
-const NOTIFY_THRESHOLD = 3; // mesma regra do backend (aviso de WhatsApp aos 3 antes)
-const REFRESH_INTERVAL_MS = 15000;
+const STORAGE_KEY = "filaFacilDemo.meuPaciente";
+const NOTIFY_THRESHOLD = 3; // mesma regra do backend real (aviso aos 3 antes)
+const MOTIVO_MAX_LENGTH = 200;
 
 const clinicName = "Nome da clínica";
 
@@ -20,34 +14,68 @@ const form = reactive({
   telefone: "",
   tipoAtendimento: "Clínico Geral",
   motivo: "",
+  prioritario: false,
+  tipoPreferencial: "",
+  outraCondicao: "",
 });
 const enviando = ref(false);
 const erroForm = ref("");
 
-const paciente = ref(null); // { id, senha, criadoEm }
-const status = ref(null); // em_espera | em_atendimento | ausente | finalizado
-const posicao = ref(null);
-const chamando = ref(null); // senha em atendimento no momento (global)
-const erro = ref("");
-const carregando = ref(false);
+const meuId = ref(carregarLocal());
 
-let refreshTimer = null;
+const paciente = computed(
+  () => state.pacientes.find((p) => p.id === meuId.value) || null
+);
+
+// Pedido de preferencial ainda não confirmado pela recepção.
+const aguardandoValidacao = computed(
+  () =>
+    paciente.value?.solicitouPreferencial && paciente.value?.prioritario === null
+);
+
+const posicao = computed(() => {
+  if (!paciente.value || paciente.value.status !== "em_espera") return null;
+  const naFrente = state.pacientes.filter(
+    (p) =>
+      p.status === "em_espera" &&
+      p.prioritario === paciente.value.prioritario &&
+      p.criadoEm < paciente.value.criadoEm
+  ).length;
+  return naFrente + 1;
+});
 
 const peopleAhead = computed(() => {
   if (posicao.value == null) return null;
   return Math.max(posicao.value - 1, 0);
 });
 
+const chamando = computed(
+  () =>
+    state.pacientes.find(
+      (p) =>
+        p.status === "em_atendimento" &&
+        p.prioritario === (paciente.value?.prioritario ?? false)
+    )?.senha ?? null
+);
+
 const isAlmostYourTurn = computed(
   () =>
-    status.value === "em_espera" &&
+    paciente.value?.status === "em_espera" &&
     peopleAhead.value !== null &&
     peopleAhead.value <= NOTIFY_THRESHOLD
 );
 
-const podeCancelar = computed(() => status.value === "em_espera");
+const motivoCount = computed(() => form.motivo.length);
+const motivoPercent = computed(() =>
+  Math.min(100, (motivoCount.value / MOTIVO_MAX_LENGTH) * 100)
+);
+const motivoNoLimite = computed(() => motivoCount.value >= MOTIVO_MAX_LENGTH);
+
+const podeCancelar = computed(() => paciente.value?.status === "em_espera");
 const podeGerarNova = computed(
-  () => status.value === "finalizado" || status.value === "ausente"
+  () =>
+    paciente.value?.status === "finalizado" ||
+    paciente.value?.status === "ausente"
 );
 
 const geradaAs = computed(() => {
@@ -57,41 +85,17 @@ const geradaAs = computed(() => {
   );
 });
 
-function salvarLocal(p) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
+function carregarLocal() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  return raw ? Number(raw) : null;
 }
+
+function salvarLocal(id) {
+  localStorage.setItem(STORAGE_KEY, String(id));
+}
+
 function limparLocal() {
   localStorage.removeItem(STORAGE_KEY);
-}
-function carregarLocal() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function atualizarStatus() {
-  if (!paciente.value) return;
-  try {
-    const resultado = await consultarStatus(paciente.value.id);
-    status.value = resultado.status;
-    posicao.value = resultado.posicao;
-    erro.value = "";
-  } catch {
-    erro.value = "Não foi possível atualizar sua senha. Verifique sua conexão.";
-  }
-}
-
-async function atualizarChamando() {
-  try {
-    const fila = await listarFila();
-    const emAtendimento = fila.find((p) => p.status === "em_atendimento");
-    chamando.value = emAtendimento ? emAtendimento.senha : null;
-  } catch {
-    // não é crítico pra experiência do paciente — ignora silenciosamente
-  }
 }
 
 async function retirarSenha() {
@@ -99,14 +103,8 @@ async function retirarSenha() {
   enviando.value = true;
   try {
     const novoPaciente = await criarPaciente({ ...form });
-    paciente.value = {
-      id: novoPaciente.id,
-      senha: novoPaciente.senha,
-      criadoEm: novoPaciente.criadoEm,
-    };
-    salvarLocal(paciente.value);
-    status.value = novoPaciente.status;
-    await Promise.all([atualizarStatus(), atualizarChamando()]);
+    meuId.value = novoPaciente.id;
+    salvarLocal(novoPaciente.id);
   } catch (e) {
     erroForm.value = e.message;
   } finally {
@@ -118,74 +116,28 @@ async function cancelarSenha() {
   if (!paciente.value || !confirm("Deseja realmente cancelar sua senha?")) {
     return;
   }
-  try {
-    await alterarStatus(paciente.value.id, "ausente");
-  } catch (e) {
-    erro.value = e.message;
-  } finally {
-    limparLocal();
-    resetarEstado();
-  }
+  await alterarStatus(paciente.value.id, "ausente");
+  limparLocal();
+  meuId.value = null;
+  resetarFormulario();
 }
 
 function novaSenha() {
   limparLocal();
-  resetarEstado();
+  meuId.value = null;
+  resetarFormulario();
 }
 
-function resetarEstado() {
-  paciente.value = null;
-  status.value = null;
-  posicao.value = null;
-  erro.value = "";
+function resetarFormulario() {
   form.nome = "";
   form.cpf = "";
   form.telefone = "";
   form.tipoAtendimento = "Clínico Geral";
   form.motivo = "";
+  form.prioritario = false;
+  form.tipoPreferencial = "";
+  form.outraCondicao = "";
 }
-
-function onStatusAlterado(p) {
-  if (p.status === "em_atendimento") {
-    chamando.value = p.senha;
-  }
-  if (paciente.value && p.id === paciente.value.id) {
-    status.value = p.status;
-    atualizarStatus();
-  } else if (status.value === "em_espera") {
-    atualizarStatus();
-  }
-}
-
-function onFilaAtualizada() {
-  if (status.value === "em_espera") {
-    atualizarStatus();
-  }
-}
-
-onMounted(async () => {
-  const salvo = carregarLocal();
-  if (salvo) {
-    paciente.value = salvo;
-    carregando.value = true;
-    await atualizarStatus();
-    carregando.value = false;
-  }
-  await atualizarChamando();
-
-  socket.on("status_alterado", onStatusAlterado);
-  socket.on("fila_atualizada", onFilaAtualizada);
-
-  refreshTimer = setInterval(() => {
-    if (paciente.value) atualizarStatus();
-  }, REFRESH_INTERVAL_MS);
-});
-
-onUnmounted(() => {
-  socket.off("status_alterado", onStatusAlterado);
-  socket.off("fila_atualizada", onFilaAtualizada);
-  if (refreshTimer) clearInterval(refreshTimer);
-});
 </script>
 
 <template>
@@ -201,7 +153,12 @@ onUnmounted(() => {
 
         <label class="field">
           <span>Nome completo</span>
-          <input v-model="form.nome" type="text" required />
+          <input
+            v-model="form.nome"
+            type="text"
+            placeholder="Ex: Maria da Silva Souza"
+            required
+          />
         </label>
         <label class="field">
           <span>CPF (somente números)</span>
@@ -211,12 +168,18 @@ onUnmounted(() => {
             inputmode="numeric"
             maxlength="11"
             autocomplete="off"
+            placeholder="Ex: 12345678909"
             required
           />
         </label>
         <label class="field">
           <span>Telefone/WhatsApp</span>
-          <input v-model="form.telefone" type="tel" required />
+          <input
+            v-model="form.telefone"
+            type="tel"
+            placeholder="Ex: (11) 98765-4321"
+            required
+          />
         </label>
         <label class="field">
           <span>Tipo de atendimento</span>
@@ -228,8 +191,59 @@ onUnmounted(() => {
         </label>
         <label class="field">
           <span>Motivo</span>
-          <input v-model="form.motivo" type="text" required />
+          <textarea
+            v-model="form.motivo"
+            :maxlength="MOTIVO_MAX_LENGTH"
+            rows="2"
+            placeholder="Ex: Consulta de rotina e exames"
+            required
+          ></textarea>
+          <div
+            class="field__counter"
+            :class="{
+              'field__counter--visible': motivoCount > 0,
+              'field__counter--limit': motivoNoLimite,
+            }"
+          >
+            <div class="field__counter-track">
+              <div
+                class="field__counter-fill"
+                :style="{ width: motivoPercent + '%' }"
+              ></div>
+            </div>
+            <span class="field__counter-text"
+              >{{ motivoCount }}/{{ MOTIVO_MAX_LENGTH }}</span
+            >
+          </div>
         </label>
+
+        <label class="field field--checkbox">
+          <input type="checkbox" v-model="form.prioritario" />
+          <span>Atendimento preferencial</span>
+        </label>
+
+        <template v-if="form.prioritario">
+          <label class="field">
+            <span>Qual a condição?</span>
+            <select v-model="form.tipoPreferencial" required>
+              <option value="" disabled>Selecione uma opção</option>
+              <option>Idoso (60 anos ou mais)</option>
+              <option>Gestante</option>
+              <option>Pessoa com deficiência (PCD)</option>
+              <option>Outro</option>
+            </select>
+          </label>
+
+          <label v-if="form.tipoPreferencial === 'Outro'" class="field">
+            <span>Qual a sua condição?</span>
+            <input
+              v-model="form.outraCondicao"
+              type="text"
+              placeholder="Descreva a condição"
+              required
+            />
+          </label>
+        </template>
 
         <button class="btn-submit" type="submit" :disabled="enviando">
           {{ enviando ? "Enviando..." : "Retirar senha" }}
@@ -237,67 +251,77 @@ onUnmounted(() => {
       </form>
 
       <template v-else>
-        <p v-if="erro" class="alert">{{ erro }}</p>
-        <p v-if="carregando" class="loading">Carregando...</p>
+        <section class="ticket-card">
+          <span class="ticket-card__label">Sua senha</span>
+          <span class="ticket-card__value">{{ paciente.senha }}</span>
+        </section>
 
+        <div v-if="aguardandoValidacao" class="notice notice--alert">
+          Aguardando a recepção confirmar seu atendimento preferencial...
+        </div>
+        <div
+          v-else-if="paciente.status === 'em_atendimento'"
+          class="notice notice--alert"
+        >
+          É a sua vez! Dirija-se ao guichê.
+        </div>
+        <div v-else-if="paciente.status === 'finalizado'" class="notice">
+          Atendimento concluído. Obrigado!
+        </div>
+        <div v-else-if="paciente.status === 'ausente'" class="notice">
+          Sua senha foi encerrada.
+        </div>
         <template v-else>
-          <section class="ticket-card">
-            <span class="ticket-card__label">Sua senha</span>
-            <span class="ticket-card__value">{{ paciente.senha }}</span>
-          </section>
-
           <div
-            v-if="status === 'em_atendimento'"
-            class="notice notice--alert"
+            v-if="paciente.solicitouPreferencial"
+            class="notice"
+            :class="paciente.prioritario ? 'notice--alert' : ''"
           >
-            É a sua vez! Dirija-se ao guichê.
+            {{
+              paciente.prioritario
+                ? "Atendimento preferencial confirmado pela recepção!"
+                : "Seu pedido de preferencial não foi confirmado — você segue na fila comum."
+            }}
           </div>
-          <div v-else-if="status === 'finalizado'" class="notice">
-            Atendimento concluído. Obrigado!
-          </div>
-          <div v-else-if="status === 'ausente'" class="notice">
-            Sua senha foi encerrada.
-          </div>
-          <template v-else>
-            <div class="info-row">
-              <section class="info-card">
-                <span class="info-card__value">{{ peopleAhead ?? "—" }}</span>
-                <span class="info-card__label">Pessoas na sua frente</span>
-              </section>
-              <section class="info-card">
-                <span class="info-card__value">{{ chamando ?? "—" }}</span>
-                <span class="info-card__label">Chamando agora</span>
-              </section>
-            </div>
 
-            <div class="notice" :class="{ 'notice--alert': isAlmostYourTurn }">
-              Avisaremos aqui quando faltarem {{ NOTIFY_THRESHOLD }} Pessoas
-              para sua vez
-            </div>
-          </template>
+          <div class="info-row">
+            <section class="info-card">
+              <span class="info-card__value">{{ peopleAhead ?? "—" }}</span>
+              <span class="info-card__label">Pessoas na sua frente</span>
+            </section>
+            <section class="info-card">
+              <span class="info-card__value">{{ chamando ?? "—" }}</span>
+              <span class="info-card__label">Chamando agora</span>
+            </section>
+          </div>
 
-          <footer class="footer">
-            <p v-if="geradaAs" class="footer__validity">
-              Senha gerada às {{ geradaAs }}
-            </p>
-            <button
-              v-if="podeCancelar"
-              class="footer__cancel"
-              type="button"
-              @click="cancelarSenha"
-            >
-              Cancelar Senha
-            </button>
-            <button
-              v-else-if="podeGerarNova"
-              class="footer__cancel"
-              type="button"
-              @click="novaSenha"
-            >
-              Tirar nova senha
-            </button>
-          </footer>
+          <div class="notice" :class="{ 'notice--alert': isAlmostYourTurn }">
+            Avisaremos aqui quando faltarem {{ NOTIFY_THRESHOLD }} Pessoas
+            para sua vez
+          </div>
         </template>
+
+        <footer class="footer">
+          <p v-if="geradaAs" class="footer__validity">
+            Senha gerada às {{ geradaAs }}
+          </p>
+          <button
+            v-if="podeCancelar"
+            class="footer__cancel"
+            type="button"
+            @click="cancelarSenha"
+          >
+            Cancelar Senha
+          </button>
+          <button
+            v-else-if="podeGerarNova"
+            class="footer__cancel"
+            type="button"
+            @click="novaSenha"
+          >
+            Tirar nova senha
+          </button>
+        </footer>
       </template>
     </main>
   </div>
@@ -326,7 +350,8 @@ $color-notice-alert-text: #b5651d;
 $color-alert-bg: #fdecec;
 $color-alert-text: #b3261e;
 
-$color-border: #dcdcd7;
+$color-border: #000000;
+$color-limit: #b3261e;
 
 $radius-lg: 20px;
 $radius-md: 14px;
@@ -393,13 +418,6 @@ button {
   text-align: center;
 }
 
-.loading {
-  margin: 0;
-  text-align: center;
-  font-size: 13px;
-  color: $color-text-muted;
-}
-
 // -- Formulário de retirada de senha ----------------------------------------
 .form {
   background: $color-card-bg;
@@ -425,7 +443,8 @@ button {
   color: $color-text-muted;
 
   input,
-  select {
+  select,
+  textarea {
     font-family: inherit;
     font-size: 14px;
     color: $color-text;
@@ -433,11 +452,99 @@ button {
     border-radius: $radius-sm;
     padding: 10px 12px;
     background: #fff;
+    transition: border-color 0.2s ease;
 
     &:focus {
       outline: 2px solid $color-primary;
       outline-offset: 1px;
     }
+  }
+
+  input[type="checkbox"] {
+    appearance: auto;
+    -webkit-appearance: checkbox;
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    padding: 0;
+    margin: 0;
+    border: initial;
+    border-radius: initial;
+    background: initial;
+  }
+
+  textarea {
+    resize: none;
+    line-height: 1.4;
+  }
+}
+
+.field--checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: $color-text;
+
+  input {
+    width: auto;
+    margin: 0;
+  }
+}
+
+.field__hint {
+  margin: -6px 0 0;
+  font-size: 11px;
+  color: $color-text-muted;
+}
+
+// -- Contador do campo Motivo ------------------------------------------------
+.field__counter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-4px);
+  overflow: hidden;
+  transition: max-height 0.25s ease, opacity 0.25s ease, transform 0.25s ease;
+
+  &--visible {
+    max-height: 20px;
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.field__counter-track {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: #eceae4;
+  overflow: hidden;
+}
+
+.field__counter-fill {
+  height: 100%;
+  background: $color-primary;
+  border-radius: 2px;
+  transition: width 0.15s ease, background 0.2s ease;
+}
+
+.field__counter-text {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: $color-text-muted;
+}
+
+.field__counter--limit {
+  .field__counter-fill {
+    background: $color-limit;
+  }
+
+  .field__counter-text {
+    color: $color-limit;
+    font-weight: 700;
   }
 }
 
