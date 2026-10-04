@@ -4,12 +4,8 @@ import qrcode from "qrcode-terminal";
 import { connectRabbitMQ, FILA_NOTIFICACOES_WHATSAPP } from "../config/rabbitmq";
 import { iniciarWhatsApp } from "../whatsapp/client";
 import { enviarMensagem } from "../whatsapp/sender";
-
-interface NotificacaoWhatsApp {
-  telefone: string;
-  nome: string;
-  pessoasNaFrente: number;
-}
+import { montarMensagem } from "./mensagens";
+import type { NotificacaoWhatsApp } from "./publisher";
 
 const apiUrl = process.env.API_URL ?? "http://localhost:3000";
 
@@ -46,12 +42,13 @@ async function main() {
 
     try {
       const payload: NotificacaoWhatsApp = JSON.parse(msg.content.toString());
-      const texto = `Olá ${payload.nome}, faltam ${payload.pessoasNaFrente} pessoas para a sua vez!`;
-      await enviarMensagem(payload.telefone, texto);
-      console.log(`WhatsApp enviado para ${payload.telefone}`);
+      await enviarMensagem(payload.telefone, montarMensagem(payload));
+      console.log(`WhatsApp (${payload.tipo}) enviado para ${payload.telefone}`);
       channel.ack(msg);
     } catch (error) {
       console.error("Falha ao processar mensagem", error);
+      // Pausa antes de devolver à fila, para não girar em loop enquanto o WhatsApp está desconectado.
+      await new Promise((resolve) => setTimeout(resolve, 5000));
       channel.nack(msg, false, true);
     }
   });

@@ -42,7 +42,7 @@ Para rodar este projeto localmente, você precisará ter instalado na sua máqui
 **1. Clone e instale as dependências**
 ```bash
 git clone [https://github.com/seu-usuario/fila-facil-backend.git](https://github.com/seu-usuario/fila-facil-backend.git)
-cd fila-facil-backend
+cd fila-facil/api
 npm install
 ```
 
@@ -54,7 +54,7 @@ Edite o `.env` informando a URL de conexão do PostgreSQL local (`DATABASE_URL`)
 
 **3. Suba o RabbitMQ** (recomendado via Docker):
 ```bash
-docker compose up rabbitmq
+cd api && docker compose up rabbitmq
 ```
 > Painel de gerenciamento: http://localhost:15672 (usuário/senha: `fila`/`fila`).
 
@@ -81,6 +81,7 @@ A API estará disponível em `http://localhost:3000` (health check em `GET /heal
 Sobe o **PostgreSQL**, **RabbitMQ**, a **API** e o **Worker** com um único comando — ideal para o dev do frontend não precisar instalar nada na máquina:
 
 ```bash
+cd api
 docker compose up --build
 ```
 

@@ -6,6 +6,8 @@ services:
       POSTGRES_USER: fila
       POSTGRES_PASSWORD: fila
       POSTGRES_DB: fila_facil
+    ports:
+      - "127.0.0.1:5435:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

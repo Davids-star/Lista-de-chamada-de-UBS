@@ -6,6 +6,7 @@ export interface CadastroPaciente {
   telefone: string;
   tipoAtendimento: string;
   motivo: string;
+  preferencial: boolean;
 }
 
 export function validarCadastroPaciente(
@@ -28,5 +29,9 @@ export function validarCadastroPaciente(
   if (!tipoAtendimento) return { error: "tipoAtendimento é obrigatório" };
   if (!motivo) return { error: "motivo é obrigatório" };
 
-  return { data: { nome, cpf, telefone, tipoAtendimento, motivo } };
+  const preferencial = body.preferencial === true;
+
+  return {
+    data: { nome, cpf, telefone, tipoAtendimento, motivo, preferencial },
+  };
 }

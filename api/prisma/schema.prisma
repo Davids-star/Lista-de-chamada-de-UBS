@@ -12,19 +12,25 @@ enum Status {
   em_atendimento
   ausente
   finalizado
+  aguardando_confirmacao
+  em_conferencia
+  recusado
 }
 
 model Paciente {
   id            Int      @id @default(autoincrement())
   nome          String
-  cpf           String   @unique
+  cpf           String   
   telefone      String
   tipoAtendimento String
   motivo        String
-  senha         Int
+  senha         Int?
   status        Status   @default(em_espera)
   criadoEm      DateTime @default(now())
   atendidoEm    DateTime?
+  preferencial  Boolean  @default(false)
+  ultimoAvisoFila Int?
 
   @@index([status, criadoEm])
+  @@index([cpf])
 }

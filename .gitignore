@@ -147,3 +147,5 @@ AGENTS.md
 
 # WhatsApp Baileys session
 whatsapp_auth/
+# Sessão do WhatsApp (Baileys) - credenciais, nunca versionar
+whatsapp_auth/

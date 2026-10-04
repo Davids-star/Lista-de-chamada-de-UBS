@@ -1,10 +1,10 @@
 import { FILA_NOTIFICACOES_WHATSAPP, getChannel } from "../config/rabbitmq";
 
-export interface NotificacaoWhatsApp {
-  telefone: string;
-  nome: string;
-  pessoasNaFrente: number;
-}
+export type NotificacaoWhatsApp =
+  | { tipo: "fila"; telefone: string; nome: string; pessoasNaFrente: number }
+  | { tipo: "vez"; telefone: string; nome: string }
+  | { tipo: "chamada_novamente"; telefone: string; nome: string }
+  | { tipo: "conferencia"; telefone: string; nome: string };
 
 export function publicarNotificacaoWhatsApp(payload: NotificacaoWhatsApp) {
   try {

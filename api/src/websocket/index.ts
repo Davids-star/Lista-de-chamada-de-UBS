@@ -31,3 +31,7 @@ export function emitirFilaAtualizada(paciente: Paciente) {
 export function emitirStatusAlterado(paciente: Paciente) {
   io?.emit("status_alterado", paciente);
 }
+
+export function emitirSenhaChamada(paciente: Paciente) {
+  io?.emit("senha_chamada", paciente);
+}
