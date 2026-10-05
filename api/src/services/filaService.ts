@@ -5,7 +5,6 @@ import {
   emitirSenhaChamada,
   emitirStatusAlterado,
 } from "../websocket";
-import { publicarNotificacaoWhatsApp } from "../messaging/publisher";
 import type { CadastroPaciente } from "../utils/validation";
 
 /** Quantas pessoas à frente disparam um aviso de aproximação no WhatsApp. */
@@ -64,11 +63,6 @@ export async function chamarParaConferencia(id: number) {
     data: { status: "em_conferencia" },
   });
 
-  publicarNotificacaoWhatsApp({
-    tipo: "conferencia",
-    telefone: atualizado.telefone,
-    nome: atualizado.nome,
-  });
   emitirStatusAlterado(atualizado);
   return { paciente: atualizado };
 }
@@ -137,14 +131,6 @@ export async function alterarStatus(id: number, status: Status) {
 
   const atualizado = await prisma.paciente.update({ where: { id }, data });
 
-  if (status === "em_atendimento") {
-    publicarNotificacaoWhatsApp({
-      tipo: "vez",
-      telefone: atualizado.telefone,
-      nome: atualizado.nome,
-    });
-  }
-
   emitirStatusAlterado(atualizado);
   await notificarFila();
   return atualizado;
@@ -162,11 +148,6 @@ export async function chamarNovamente(id: number): Promise<ResultadoChamada> {
     return { erro: "nao_esta_em_atendimento" };
   }
 
-  publicarNotificacaoWhatsApp({
-    tipo: "chamada_novamente",
-    telefone: paciente.telefone,
-    nome: paciente.nome,
-  });
   emitirSenhaChamada(paciente);
 
   return { paciente };
@@ -195,11 +176,5 @@ async function notificarFila() {
       data: { ultimoAvisoFila: pessoasNaFrente },
     });
 
-    publicarNotificacaoWhatsApp({
-      tipo: "fila",
-      telefone: paciente.telefone,
-      nome: paciente.nome,
-      pessoasNaFrente,
-    });
   }
 }

@@ -16,55 +16,19 @@ services:
       timeout: 5s
       retries: 10
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: fila-facil-rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: fila
-      RABBITMQ_DEFAULT_PASS: fila
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-
   api:
     build: .
     container_name: fila-facil-api
     depends_on:
       db:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://fila:fila@db:5432/fila_facil?schema=public
-      RABBITMQ_URL: amqp://fila:fila@rabbitmq:5672
-      WHATSAPP_AUTH_DIR: ./whatsapp_auth
       PORT: 3000
+      CORS_ORIGIN: "*"
     ports:
       - "3000:3000"
-    volumes:
-      - whatsapp_auth:/app/whatsapp_auth
     command: sh -c "npx prisma migrate deploy && node dist/server.js"
-
-  worker:
-    build: .
-    container_name: fila-facil-worker
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://fila:fila@db:5432/fila_facil?schema=public
-      RABBITMQ_URL: amqp://fila:fila@rabbitmq:5672
-      WHATSAPP_AUTH_DIR: ./whatsapp_auth
-      API_URL: http://api:3000
-    volumes:
-      - whatsapp_auth:/app/whatsapp_auth
-    command: ["node", "dist/messaging/worker.js"]
 
 volumes:
   pgdata:
-  whatsapp_auth:

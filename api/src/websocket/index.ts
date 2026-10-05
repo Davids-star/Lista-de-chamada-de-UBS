@@ -1,12 +1,13 @@
 import { Server } from "socket.io";
 import type { Server as HttpServer } from "http";
 import type { Paciente } from "@prisma/client";
+import { corsOrigin } from "../config/cors";
 
 let io: Server | null = null;
 
 export function initSocket(httpServer: HttpServer): Server {
   io = new Server(httpServer, {
-    cors: { origin: "*" },
+    cors: { origin: corsOrigin },
   });
 
   io.on("connection", (socket) => {
