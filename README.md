@@ -81,6 +81,7 @@ A API estará disponível em `http://localhost:3000` (health check em `GET /heal
 Sobe **PostgreSQL**, **API** e **Site** com um único comando. Só precisa do [Docker](https://docs.docker.com/get-docker/) instalado.
 
 ```bash
+cp .env.example .env     # crie o .env e troque POSTGRES_PASSWORD por uma senha sua
 docker compose up --build
 ```
 
@@ -92,7 +93,7 @@ docker compose up --build
 
 Para parar: `docker compose down`.
 
-> **Acessar de outro aparelho (ex.: celular na mesma rede):** o site grava o endereço da API no build. Troque `VITE_API_URL` no `docker-compose.yml` pelo IP do computador (ex.: `http://192.168.0.10:3000`) e rode `docker compose up --build` de novo.
+> **Acessar de outro aparelho (ex.: celular na mesma rede):** o site grava o endereço da API no build. Troque `VITE_API_URL` no `.env` pelo IP do computador (ex.: `http://192.168.0.10:3000`) e rode `docker compose up --build` de novo.
 
 Para rodar a API fora do Docker (dev local), copie `api/.env.example` para `api/.env` e use sua instância local do PostgreSQL.
 
@@ -115,8 +116,10 @@ cd Lista-de-chamada-de-UBS
 ```
 Se recebeu um `.zip`, descompacte e entre na pasta (a que contém o `docker-compose.yml`).
 
-**3. Suba tudo**
+**3. Crie o `.env` e suba tudo**
+O `.env` guarda as senhas e configurações e **não vem no projeto** (não é versionado). Crie a partir do exemplo e troque `POSTGRES_PASSWORD` por uma senha sua (`openssl rand -hex 16` gera uma):
 ```bash
+cp .env.example .env        # Windows (PowerShell): copy .env.example .env
 docker compose up --build
 ```
 A primeira vez demora alguns minutos (baixa as imagens e compila). Está pronto quando aparecer `API Fila Fácil rodando na porta 3000`.
@@ -129,11 +132,11 @@ A primeira vez demora alguns minutos (baixa as imagens e compila). Está pronto 
 | Retirar senha | http://localhost:8080/retirar-senha |
 | API (teste) | http://localhost:3000/health |
 
-Não precisa instalar Node, PostgreSQL nem criar `.env`: está tudo dentro do Docker.
+Não precisa instalar Node nem PostgreSQL: está tudo dentro do Docker.
 
 **5. Testar pelo celular (mesma rede Wi-Fi)**
 1. Descubra o IP do computador (`ipconfig` no Windows, `ip a` no Linux, ou nas configurações de rede do Mac), por exemplo `192.168.0.10`.
-2. No `docker-compose.yml`, em `site → build → args`, troque `VITE_API_URL` por `http://192.168.0.10:3000`.
+2. No `.env`, troque `VITE_API_URL` por `http://192.168.0.10:3000`.
 3. Rode `docker compose up --build` de novo.
 4. No celular, abra `http://192.168.0.10:8080`.
 
@@ -148,6 +151,6 @@ docker compose down -v         # para tudo e apaga o banco
 ```
 
 **Problemas comuns**
-- *"port is already allocated"*: algo já usa a porta 3000 ou 8080. Feche o outro programa ou mude a porta à esquerda em `ports:` do `docker-compose.yml` (ex.: `"8081:80"`).
+- *"port is already allocated"*: algo já usa a porta 3000 ou 8080. Feche o outro programa ou mude `API_PORT` / `SITE_PORT` no `.env`.
 - *Site abre mas não carrega a fila*: o `VITE_API_URL` está com um endereço que o navegador não alcança. Confira o passo 5 e refaça o `--build`.
 - *Primeira tela demora*: espere o log mostrar `Banco de dados conectado` antes de abrir o site.
