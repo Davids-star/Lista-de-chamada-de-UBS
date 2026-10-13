@@ -60,4 +60,14 @@ defineProps<{ subtitulo: string }>()
     padding: 14px 16px;
   }
 }
+
+@media (max-width: 400px) {
+  .marca small {
+    display: none;
+  }
+
+  .marca strong {
+    font-size: 1.1rem;
+  }
+}
 </style>

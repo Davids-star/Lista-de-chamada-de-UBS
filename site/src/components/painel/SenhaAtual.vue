@@ -90,4 +90,11 @@ defineProps<{ paciente: Paciente | null }>()
   color: var(--cinza-texto);
   font-size: 1.1rem;
 }
+
+@media (max-width: 600px) {
+  .senha-atual {
+    min-height: 220px;
+    padding: 16px;
+  }
+}
 </style>

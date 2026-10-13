@@ -127,4 +127,10 @@ defineEmits<{ novaSenha: [] }>()
   color: var(--verde-escuro);
   font-weight: 700;
 }
+
+@media (max-width: 480px) {
+  .codigo {
+    font-size: 3.5rem;
+  }
+}
 </style>

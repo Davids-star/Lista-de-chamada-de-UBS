@@ -246,4 +246,10 @@ small {
 .aviso span {
   color: var(--cinza-texto);
 }
+
+@media (max-width: 480px) {
+  .opcoes {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

@@ -2,17 +2,40 @@ import type { NovoPaciente, Paciente, PosicaoFila, StatusPaciente } from '@/type
 
 export const API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 
-async function request<T>(caminho: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${caminho}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...init,
-  })
-  const corpo = await res.json().catch(() => null)
+const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-  if (!res.ok) {
-    throw new Error(corpo?.error ?? `Erro ${res.status}`)
+/**
+ * Faz a requisição com algumas tentativas: a API (ex.: plano gratuito do Render) pode
+ * demorar a "acordar" e a primeira chamada após um reload falha com erro de rede ou 502/503/504.
+ */
+async function request<T>(caminho: string, init?: RequestInit): Promise<T> {
+  const tentativas = (init?.method ?? 'GET') === 'GET' ? 4 : 1
+
+  for (let i = 1; ; i++) {
+    try {
+      const res = await fetch(`${API_URL}${caminho}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...init,
+      })
+      if ([502, 503, 504].includes(res.status) && i < tentativas) {
+        await esperar(1500 * i)
+        continue
+      }
+
+      const corpo = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error(corpo?.error ?? `Erro ${res.status}`)
+      }
+      return corpo as T
+    } catch (e) {
+      const falhaDeRede = e instanceof TypeError
+      if (!falhaDeRede) throw e
+      if (i >= tentativas) {
+        throw new Error('Não foi possível conectar ao servidor. Tente novamente em instantes.')
+      }
+      await esperar(1500 * i)
+    }
   }
-  return corpo as T
 }
 
 export const filaApi = {

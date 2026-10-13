@@ -83,4 +83,20 @@ li {
   margin: 0;
   color: var(--cinza-texto);
 }
+
+@media (max-width: 600px) {
+  .proximas {
+    padding: 14px;
+  }
+
+  li {
+    gap: 12px;
+    padding: 10px 12px;
+  }
+
+  .codigo {
+    min-width: 72px;
+    font-size: 1.25rem;
+  }
+}
 </style>

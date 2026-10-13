@@ -40,3 +40,24 @@ button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* 16px nos campos evita o zoom automático do iOS ao focar */
+input,
+select {
+  font-size: 16px;
+}
+
+/* alvos de toque confortáveis no celular */
+@media (pointer: coarse) {
+  button {
+    min-height: 48px;
+  }
+}

@@ -1,0 +1,45 @@
+# Sobe tudo com: docker compose up --build
+#   Site:  http://localhost:8080
+#   API:   http://localhost:3000  (health: /health)
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fila}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fila}
+      POSTGRES_DB: ${POSTGRES_DB:-fila_facil}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fila}:${POSTGRES_PASSWORD:-fila}@db:5432/${POSTGRES_DB:-fila_facil}?schema=public
+      PORT: 3000
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    restart: unless-stopped
+
+  site:
+    build:
+      context: ./site
+      args:
+        # Endereço da API visto pelo NAVEGADOR (não pelo container)
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+    depends_on:
+      - api
+    ports:
+      - "${SITE_PORT:-8080}:80"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

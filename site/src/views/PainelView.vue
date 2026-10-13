@@ -207,6 +207,7 @@ onUnmounted(() => window.clearInterval(timer))
 <style scoped>
 .painel {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -335,6 +336,52 @@ onUnmounted(() => window.clearInterval(timer))
 
   .relogio strong {
     font-size: 1.8rem;
+  }
+}
+
+@media (min-width: 1500px) {
+  .grade {
+    width: 100%;
+    max-width: 1500px;
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 600px) {
+  .grade {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .principal {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .abas {
+    grid-template-columns: 1fr;
+  }
+
+  .aba {
+    padding: 12px;
+  }
+
+  .chamar {
+    padding: 18px;
+    font-size: 1.25rem;
+  }
+
+  .secundarios.tres,
+  .secundarios.duas {
+    grid-template-columns: 1fr;
+  }
+
+  .relogio small {
+    display: none;
+  }
+
+  .relogio strong {
+    font-size: 1.4rem;
   }
 }
 </style>

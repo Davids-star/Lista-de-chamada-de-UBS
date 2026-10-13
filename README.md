@@ -72,24 +72,82 @@ npm run worker     # Consome o RabbitMQ e envia WhatsApp
 
 A API estará disponível em `http://localhost:3000` (health check em `GET /health`).
 
-> **Alternativa:** para subir Postgres, RabbitMQ, API e Worker juntos, veja a seção **Rodando com Docker** abaixo.
+> **Alternativa:** para subir Postgres, API e Site juntos, veja a seção **Rodando com Docker** abaixo.
 
 ---
 
 ## 🐳 Rodando com Docker (ambiente completo)
 
-Sobe o **PostgreSQL**, **RabbitMQ**, a **API** e o **Worker** com um único comando — ideal para o dev do frontend não precisar instalar nada na máquina:
+Sobe **PostgreSQL**, **API** e **Site** com um único comando. Só precisa do [Docker](https://docs.docker.com/get-docker/) instalado.
 
 ```bash
-cd api
 docker compose up --build
 ```
 
+- Site: http://localhost:8080 (no computador abre o painel; no celular, a retirada de senha)
 - API: http://localhost:3000 (health check em `GET /health`)
-- RabbitMQ (painel): http://localhost:15672 (usuário/senha: `fila`/`fila`)
-- Banco Postgres: apenas na rede interna do compose (porta `5432` não é exposta no host, evitando conflito com Postgres local).
-- A sessão do WhatsApp (`whatsapp_auth/`) e os dados do banco ficam em volumes Docker persistentes (não se perdem ao reiniciar).
+- Banco Postgres: só na rede interna do compose (não ocupa porta do seu computador).
+- As tabelas são criadas automaticamente na primeira subida (migrations).
+- Os dados ficam no volume `pgdata`. Para apagar tudo e começar do zero: `docker compose down -v`.
 
-Para rodar a API fora do Docker (dev local), copie `.env.example` para `.env` e use sua instância local do PostgreSQL.
+Para parar: `docker compose down`.
 
-> **Nota:** o Worker abre a sessão do WhatsApp (QR Code via Socket.io). Mensagens do RabbitMQ só são enviadas depois que a sessão for conectada.
+> **Acessar de outro aparelho (ex.: celular na mesma rede):** o site grava o endereço da API no build. Troque `VITE_API_URL` no `docker-compose.yml` pelo IP do computador (ex.: `http://192.168.0.10:3000`) e rode `docker compose up --build` de novo.
+
+Para rodar a API fora do Docker (dev local), copie `api/.env.example` para `api/.env` e use sua instância local do PostgreSQL.
+
+
+---
+
+## 💻 Rodando em outra máquina 
+Felipe com o front
+
+Passo a passo para quem recebeu o projeto e quer rodar do zero.
+
+**1. Instale o Docker**
+- Windows/Mac: [Docker Desktop](https://docs.docker.com/get-docker/) (abra o programa e espere ele iniciar).
+- Linux: instale o Docker Engine e o plugin Compose. Confira com `docker compose version`.
+
+**2. Baixe o projeto**
+```bash
+git clone https://github.com/Davids-star/Lista-de-chamada-de-UBS.git
+cd Lista-de-chamada-de-UBS
+```
+Se recebeu um `.zip`, descompacte e entre na pasta (a que contém o `docker-compose.yml`).
+
+**3. Suba tudo**
+```bash
+docker compose up --build
+```
+A primeira vez demora alguns minutos (baixa as imagens e compila). Está pronto quando aparecer `API Fila Fácil rodando na porta 3000`.
+
+**4. Abra no navegador**
+
+| O quê | Endereço |
+|---|---|
+| Painel da recepção (computador) | http://localhost:8080/painel |
+| Retirar senha | http://localhost:8080/retirar-senha |
+| API (teste) | http://localhost:3000/health |
+
+Não precisa instalar Node, PostgreSQL nem criar `.env`: está tudo dentro do Docker.
+
+**5. Testar pelo celular (mesma rede Wi-Fi)**
+1. Descubra o IP do computador (`ipconfig` no Windows, `ip a` no Linux, ou nas configurações de rede do Mac), por exemplo `192.168.0.10`.
+2. No `docker-compose.yml`, em `site → build → args`, troque `VITE_API_URL` por `http://192.168.0.10:3000`.
+3. Rode `docker compose up --build` de novo.
+4. No celular, abra `http://192.168.0.10:8080`.
+
+Se não abrir, libere as portas `8080` e `3000` no firewall do computador.
+
+**Comandos úteis**
+```bash
+docker compose up -d           # sobe em segundo plano
+docker compose logs -f api     # acompanha os logs da API
+docker compose down            # para tudo (mantém os dados)
+docker compose down -v         # para tudo e apaga o banco
+```
+
+**Problemas comuns**
+- *"port is already allocated"*: algo já usa a porta 3000 ou 8080. Feche o outro programa ou mude a porta à esquerda em `ports:` do `docker-compose.yml` (ex.: `"8081:80"`).
+- *Site abre mas não carrega a fila*: o `VITE_API_URL` está com um endereço que o navegador não alcança. Confira o passo 5 e refaça o `--build`.
+- *Primeira tela demora*: espere o log mostrar `Banco de dados conectado` antes de abrir o site.

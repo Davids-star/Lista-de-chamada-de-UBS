@@ -14,12 +14,37 @@ const erro = ref<string | null>(null)
 const paciente = ref<Paciente | null>(null)
 const posicao = ref<PosicaoFila | null>(null)
 const socket = getSocket()
+const CHAVE_SENHA = 'fila-facil:senha'
+
+/** Guarda a senha no navegador para ela sobreviver ao recarregar a página. */
+function guardarSenha(p: Paciente | null) {
+  try {
+    if (p) localStorage.setItem(CHAVE_SENHA, JSON.stringify(p))
+    else localStorage.removeItem(CHAVE_SENHA)
+  } catch {
+    // armazenamento indisponível (ex.: aba anônima): segue sem persistir
+  }
+}
+
+async function restaurarSenha() {
+  try {
+    const salvo = localStorage.getItem(CHAVE_SENHA)
+    if (!salvo) return
+    paciente.value = JSON.parse(salvo) as Paciente
+    await atualizarPosicao()
+  } catch (e) {
+    // senha que não existe mais (ex.: fila reiniciada) ou dado corrompido: volta ao formulário
+    if (e instanceof Error && !(e instanceof SyntaxError) && e.message.startsWith('Não foi possível')) return
+    novaSenha()
+  }
+}
 
 async function gerarSenha(dados: NovoPaciente) {
   enviando.value = true
   erro.value = null
   try {
     paciente.value = await filaApi.criar(dados)
+    guardarSenha(paciente.value)
     await atualizarPosicao()
   } catch (e) {
     erro.value = mensagemDeErro(e)
@@ -37,7 +62,8 @@ async function atualizarPosicao() {
 function aoAlterarStatus(atualizado: Paciente) {
   if (paciente.value?.id !== atualizado.id) return
   paciente.value = atualizado
-  atualizarPosicao()
+  guardarSenha(atualizado)
+  atualizarPosicao().catch(() => {})
 }
 
 /** Quando a recepção chama de novo, avisa o paciente na tela e com vibração (se o aparelho suportar). */
@@ -48,12 +74,14 @@ function aoChamarNovamente(chamado: Paciente) {
 }
 
 function novaSenha() {
+  guardarSenha(null)
   paciente.value = null
   posicao.value = null
   chamadaRecente.value = false
 }
 
 onMounted(() => {
+  restaurarSenha()
   socket.on('status_alterado', aoAlterarStatus)
   socket.on('senha_chamada', aoChamarNovamente)
 })
@@ -93,6 +121,7 @@ onUnmounted(() => {
 <style scoped>
 .pagina {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -128,5 +157,20 @@ h1 {
   margin: 16px 0 0;
   color: var(--vermelho);
   font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .conteudo {
+    padding: 12px;
+  }
+
+  .cartao {
+    padding: 20px 16px;
+    border-radius: 14px;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+  }
 }
 </style>
